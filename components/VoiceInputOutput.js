@@ -11,6 +11,7 @@ const VoiceInputOutput = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [inputPrompt, setInputPrompt] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
 
   const playTingSound = () => {
     const audio = new Audio("/beep-22.mp3");
@@ -38,7 +39,7 @@ const VoiceInputOutput = () => {
   const handleResponsiveVoiceTTS = (text) => {
     if (typeof window !== "undefined" && window.responsiveVoice) {
       setIsSpeaking(true);
-      window.responsiveVoice.speak(text, "Indonesian Female", {
+      window.responsiveVoice.speak(text, "Indonesian Male", {
         onend: () => {
           playTingSound();
           setIsSpeaking(false);
@@ -51,27 +52,98 @@ const VoiceInputOutput = () => {
 
   const handleAskAPI = async (prompt) => {
     if (!prompt) {
-      alert("Masukkan pertanyaan atau gunakan pengenalan suara.");
-      return;
+        alert("Masukkan pertanyaan atau gunakan pengenalan suara.");
+        return;
     }
 
-    try {
-      const response = await fetch("http://127.0.0.1:8000/api/assistant/prompt_view", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, user_id: "alex" }),
-      });
+      try {
+          const response = await fetch("http://127.0.0.1:8000/api/assistant/prompt_view", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt, user_id: "alex" }),
+          });
 
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+          if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
-      const data = await response.json();
-      const cleanedResponse = data.response.replace(/[^\w\s.,?'"\-()!]/g, "");
-      setResponse(cleanedResponse.split("Key Entities")[0]);
-      handleResponsiveVoiceTTS(cleanedResponse.split("Key Entities")[0]);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      alert("Terjadi kesalahan saat menghubungi API.");
-    }
+          const data = await response.json();
+          const cleanedResponse = data.response.replace(/[^\w\s.,?'"\-()!]/g, "");
+          const finalResponse = cleanedResponse.split("Key Entities")[0].trim();
+
+          // Periksa apakah respons bot sudah ada dalam chat history
+          const isDuplicate = chatHistory.some(
+              (item) => item.type === "bot" && item.text === finalResponse
+          );
+          if (isDuplicate) return; // Jika respons duplikat, hentikan eksekusi
+
+          // Tambahkan pesan pengguna ke chat history
+          setChatHistory((prev) => [
+              ...prev,
+              { type: "user", text: prompt, timestamp: new Date().toLocaleTimeString() },
+          ]);
+
+          // Variabel untuk menampilkan karakter demi karakter
+          const characters = finalResponse.split("");
+          let displayedText = "";
+          let currentCharIndex = 0;
+
+          // Tambahkan placeholder untuk respons bot di awal
+          let botMessageIndex = -1;
+          setChatHistory((prev) => {
+              const updated = [...prev];
+              botMessageIndex = updated.length; // Simpan indeks pesan bot
+              updated.push({
+                  type: "bot",
+                  text: "",
+                  timestamp: new Date().toLocaleTimeString(),
+                  complete: false,
+              });
+              return updated;
+          });
+
+          // Fungsi untuk memperbarui teks
+          const updateText = () => {
+              if (currentCharIndex < characters.length) {
+                  displayedText += characters[currentCharIndex];
+                  setChatHistory((prev) => {
+                      const updated = [...prev];
+                      updated[botMessageIndex].text = displayedText;
+                      return updated;
+                  });
+                  currentCharIndex++;
+              }
+          };
+
+          // Trigger TTS dan sinkronisasi dengan karakter
+          const estimatedWPM = 150; // Kecepatan rata-rata TTS
+          const charInterval = (60000 / (estimatedWPM * 5)); // Waktu per karakter dalam ms
+
+          responsiveVoice.speak(finalResponse, "Indonesian Female", {
+              onstart: () => {
+                  const textInterval = setInterval(() => {
+                      updateText();
+                      if (currentCharIndex >= characters.length) {
+                          clearInterval(textInterval);
+                          setChatHistory((prev) => {
+                              const updated = [...prev];
+                              updated[botMessageIndex].complete = true;
+                              return updated;
+                          });
+                      }
+                  }, charInterval);
+              },
+              onend: () => {
+                  // Tandai pesan bot sebagai selesai saat TTS selesai
+                  setChatHistory((prev) => {
+                      const updated = [...prev];
+                      updated[botMessageIndex].complete = true;
+                      return updated;
+                  });
+              },
+          });
+      } catch (error) {
+          console.error("Error fetching data:", error);
+          alert("Terjadi kesalahan saat menghubungi API.");
+      }
   };
 
   const handleVoiceInteraction = async () => {
@@ -183,23 +255,80 @@ const VoiceInputOutput = () => {
         fontSize: "20px",
         fontWeight: "bold",
         // color: "#4caf50",
-        textShadow: "2px 2px 4px rgba(0, 0, 0, 0.3)",
-        zIndex: 1000, // Agar tetap di atas
+        zIndex: 1000,   
+        width: "40%"
       }}
     >
       <center>
       TechFusion <br/> AI Presentation Assistant
       </center>
+      {/* Avatar Section */}
+      <div style={{ marginTop: "20px", display: "flex", flexDirection: "column",
+              justifyContent: "center", }}>
+        {isSpeaking ? (
+          <img
+            src="/ai-talking-avatar1.gif"
+            alt="AI Avatar"
+            style={{
+              width: "400px",
+              height: "250px",
+              borderRadius: "15px",
+              border: "2px solid #000",
+              alignSelf: "center" 
+            }}
+          />
+        ) : (
+          <img
+            src="/ai-avatar1.PNG"
+            alt="AI Avatar"
+            style={{
+              width: "400px",
+              height: "250px",
+              borderRadius: "15px",
+              border: "2px solid #000",
+              alignSelf: "center"
+            }}
+            />
+          )}
+
+        <div>
+          <div className="chat-history" style={{ maxHeight: "400px", overflowY: "auto", margin: "20px 0", display: "flex", flexDirection: "column" }}>
+          {chatHistory.map((chat, index) => (
+            <div key={index} style={{
+              display: "flex",
+              flexDirection: chat.type === "user" ? "row-reverse" : "row",
+              alignItems: "center",
+              marginBottom: "10px",
+            }}>
+              <div style={{
+                padding: "10px",
+                backgroundColor: chat.type === "user" ? "#6261ad" : "#f1f1f1",
+                color: chat.type === "user" ? "white" : "black",
+                borderRadius: "12px",
+                maxWidth: "80%",
+                fontSize:"15px",
+                fontWeight: "normal"
+              }}>
+                {chat.text}
+              </div>
+              <div style={{ fontSize: "12px", color: "#555", margin: "0 10px" }}>
+                {chat.timestamp}
+              </div>
+            </div>
+          ))}
+        </div>
+        </div>
+      </div>
+     
     </div>
   
-      <div style={{ textAlign: "center", marginTop: "" }}>
+      <div id="test" style={{ textAlign: "center", marginTop: "" }}>
         <Script
           src={`https://code.responsivevoice.org/responsivevoice.js?key=vDZj5V8V`}
           strategy="beforeInteractive"
         />
-
-
         <style>{buttonStyles.keyframes}</style>
+        {/* end history chat */}
 
         {/* Button Section */}
         <div style={{ position: "fixed", bottom: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 999, display: "flex", alignItems: "center" }}>
@@ -215,7 +344,7 @@ const VoiceInputOutput = () => {
           >
             {currentIcon}
           </button>
-
+          
           <input
             type="text"
             value={inputPrompt}
@@ -234,50 +363,6 @@ const VoiceInputOutput = () => {
             }}
           />
         </div>
-
-        {/* Avatar Section */}
-        <div style={{ marginTop: "20px" }}>
-          {isSpeaking ? (
-            <img
-              src="/ai-talking-avatar1.gif"
-              alt="AI Avatar"
-              style={{
-                width: "400px",
-                height: "250px",
-                borderRadius: "15px",
-                border: "2px solid #000",
-              }}
-            />
-          ) : (
-            <img
-              src="/ai-avatar1.PNG"
-              alt="AI Avatar"
-              style={{
-                width: "400px",
-                height: "250px",
-                borderRadius: "15px",
-                border: "2px solid #000",
-              }}
-            />
-          )}
-        </div>
-
-        {/* Teks Efek Ketikan */}
-        {typedResponse && (
-          <div
-            style={{
-              fontSize: "18px",
-              color: "#333",
-              marginTop: "20px",
-              width: "500px",
-              textAlign: "center",
-              padding: "0 10px",
-              overflowWrap: "break-word",
-            }}
-          >
-            {typedResponse.replace("undefined", "").trim()}
-          </div>
-        )}
       </div>
     </>
   );
