@@ -71,6 +71,16 @@ export default function Home() {
     }
   };
 
+  const handleTouchStart = (event) => {
+    event.preventDefault();
+    startMic();
+  };
+
+  const handleTouchEnd = (event) => {
+    event.preventDefault();
+    stopMic();
+  };
+
   return (
     <div
       style={{
@@ -83,6 +93,8 @@ export default function Home() {
       <button
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           padding: "10px 30px",
           fontSize: "16px",
